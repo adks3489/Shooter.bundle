@@ -1,0 +1,1 @@
+Plex plugin for download subtitle from shooter.cn

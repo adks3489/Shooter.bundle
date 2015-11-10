@@ -9,21 +9,40 @@ import urllib
 import urllib2
 from urllib2 import HTTPError
 import httplib
-
+from pyTongwen.conv import TongWenConv
+import pysrt
+__TONGWEN = TongWenConv()
 
 SHOOTER_API = 'https://www.shooter.cn/api/subapi.php'
 # OS_LANGUAGE_CODES = 'http://www.opensubtitles.org/addons/export_languages.php'
 SHOOTER_PLEX_USERAGENT = 'plexapp.com v9.0'
 subtitleExt       = ['utf','utf8','utf-8','sub','srt','smi','rt','ssa','aqt','jss','ass','idx']
- 
+
 def Start():
   HTTP.CacheTime = 0
   HTTP.Headers['User-agent'] = SHOOTER_PLEX_USERAGENT
   Log.Debug("Shooter Agent Start")
 
+def to_unicode(sub_str):
+    encoding = chardet.detect(sub_str).get('encoding')
+    if encoding:
+        sub_unicode = unicode(sub_str, encoding, 'ignore')
+    return sub_unicode
+
+def reset_index(sub_unicode):
+    subs = pysrt.from_string(sub_unicode)
+    for i in range(1, len(subs) + 1):
+        subs[i - 1].index = i
+
+    new_sub = StringIO.StringIO()
+    subs.write_into(new_sub)
+    new_sub_unicode = new_sub.getvalue()
+    new_sub.close()
+    return new_sub_unicode
+
 def fetchSubtitle(url):
   Log("fetching subtitle %s" % (url))
-  folder, filename = os.path.split(url)  
+  folder, filename = os.path.split(url)
   filename_without_extension, extension = os.path.splitext(filename)
 
   # check subtitle whether exists or not
@@ -32,7 +51,7 @@ def fetchSubtitle(url):
     file_path = os.path.join(folder, subtitle)
     if os.path.exists(file_path):
       Log("subtitle file(s) has already existed.")
-      return
+      # return
 
   statinfo = os.stat(url)
   file = io.open(url, "rb")
@@ -77,7 +96,7 @@ def fetchSubtitle(url):
       subtitle_link = file_json['Link']
       subtitle_extension = file_json["Ext"]
       subtitle_filename = "%s.%s" % (filename_without_extension, subtitle_extension)
-      subtitle_obj = {'ext' : subtitle_extension, 
+      subtitle_obj = {'ext' : subtitle_extension,
                       'link' : subtitle_link,
                       'subtitle_filename' : subtitle_filename}
       subtitles.append(subtitle_obj)
@@ -95,8 +114,12 @@ def fetchSubtitle(url):
     u = urllib2.urlopen(subtitle_to_download['link'])
     fileurl = os.path.join(folder, subtitle_to_download['subtitle_filename'])
     with io.open(fileurl, "wb") as subtitle_file:
-      subtitle_file.write(u.read())
-      
+      subtitle_string = u.read()
+      unicode_subtitle = to_unicode(subtitle_string)
+      if subtitle_to_download['ext'] == 'srt':
+        unicode_subtitle = reset_index(unicode_subtitle)
+      subtitle_file.write(unicode_subtitle)
+
     Log.Debug("subtitle %s downloaded" % (subtitle_to_download['subtitle_filename']))
 
   except urllib2.HTTPError, e:
@@ -107,25 +130,25 @@ def fetchSubtitle(url):
 
 class ShooterAgentMovies(Agent.Movies):
   name = 'Shooter.cn'
-  languages = [Locale.Language.Chinese]  
+  languages = [Locale.Language.Chinese]
   primary_provider = False
   contributes_to = ['com.plexapp.agents.imdb']
 
   def search(self, results, media, lang):
     Log.Debug("ShooterAgentMovies.search")
     results.Append(MetadataSearchResult(
-      id    = "null",    
+      id    = "null",
       score = 100
     ))
-    
-    
+
+
   def update(self, metadata, media, lang):
-    Log.Debug("ShooterAgentMovies.update")    
+    Log.Debug("ShooterAgentMovies.update")
     for i in media.items:
       for part in i.parts:
         fetchSubtitle(part.file)
 
-    
+
 
 class ShooterAgentTVShows(Agent.TV_Shows):
   name = 'Shooter.cn'
@@ -136,10 +159,10 @@ class ShooterAgentTVShows(Agent.TV_Shows):
   def search(self, results, media, lang, manual):
     Log.Debug("ShooterAgentTVShows.search")
     results.Append(MetadataSearchResult(
-      id    = "null",    
+      id    = "null",
       score = 100
     ))
-    
+
 
   def update(self, metadata, media, lang, force):
     Log.Debug("ShooterAgentTVShows.update")
